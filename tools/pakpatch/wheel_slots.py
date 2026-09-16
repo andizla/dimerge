@@ -325,22 +325,38 @@ def steam_paks():
             steam = winreg.QueryValueEx(k, "SteamPath")[0]
     except OSError:
         return []
-    libs = [steam]
-    try:
-        for line in open(os.path.join(steam, "steamapps", "libraryfolders.vdf"), encoding="utf-8", errors="replace"):
-            if '"path"' in line:
-                libs.append(line.split('"')[3].replace(BS + BS, BS))
-    except OSError:
-        pass
-    out = []
+    # the registry spells the Steam folder "c:/program files (x86)/steam" and libraryfolders.vdf lists the same
+    # library as "C:\Program Files (x86)\Steam": one spelling, and paths compared without case, or every
+    # install shows up twice
+    libs, seen = [], set()
+    for lib in [steam.replace("/", BS)] + vdf_paths(steam):
+        key = os.path.normcase(os.path.normpath(lib))
+        if key not in seen:
+            seen.add(key)
+            libs.append(lib)
+    out, seen = [], set()
     for lib in libs:
         common = os.path.join(lib, "steamapps", "common")
         if not os.path.isdir(common):
             continue
-        for name in sorted(os.listdir(common)):
+        for name in sorted(os.listdir(common), key=str.lower):
             pak = os.path.join(common, name, "preload", "paks", "client", "initial.pak")
-            if name.startswith("SnowRunner") and os.path.exists(pak) and pak not in out:
+            key = os.path.normcase(os.path.normpath(pak))
+            if name.lower().startswith("snowrunner") and os.path.exists(pak) and key not in seen:
+                seen.add(key)
                 out.append(pak)
+    return out
+
+
+def vdf_paths(steam):
+    """the library folders listed in steamapps/libraryfolders.vdf (backslashes escaped in the file)"""
+    out = []
+    try:
+        for line in open(os.path.join(steam, "steamapps", "libraryfolders.vdf"), encoding="utf-8", errors="replace"):
+            if '"path"' in line:
+                out.append(line.split('"')[3].replace(BS + BS, BS))
+    except OSError:
+        pass
     return out
 
 

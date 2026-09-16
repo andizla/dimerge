@@ -383,7 +383,16 @@ static std::vector<std::wstring> SteamBins() {
     std::vector<std::wstring> out;
     wchar_t steam[MAX_PATH] = {}; DWORD n = sizeof(steam);
     if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Valve\\Steam", L"SteamPath", RRF_RT_REG_SZ, nullptr, steam, &n) != ERROR_SUCCESS) return out;
-    std::vector<std::wstring> libs = { steam };
+    // the registry spells the Steam folder "c:/program files (x86)/steam" while libraryfolders.vdf lists the same
+    // library as "C:\Program Files (x86)\Steam": one spelling, and paths compared without case, or every install
+    // shows up twice
+    auto samePath = [](const std::wstring& a, const std::wstring& b) { return _wcsicmp(a.c_str(), b.c_str()) == 0; };
+    auto addLib = [&](std::vector<std::wstring>& libs, std::wstring path) {
+        for (auto& c : path) if (c == L'/') c = L'\\';
+        while (!path.empty() && path.back() == L'\\') path.pop_back();
+        if (!path.empty() && std::find_if(libs.begin(), libs.end(), [&](const std::wstring& l) { return samePath(l, path); }) == libs.end()) libs.push_back(path);
+    };
+    std::vector<std::wstring> libs; addLib(libs, steam);
     std::wifstream vdf(std::wstring(steam) + L"\\steamapps\\libraryfolders.vdf");
     std::wstring line;
     while (std::getline(vdf, line)) {
@@ -393,7 +402,7 @@ static std::vector<std::wstring> SteamBins() {
         if (a == std::wstring::npos || b == std::wstring::npos) continue;
         std::wstring path = line.substr(a + 1, b - a - 1);
         std::wstring fixed; for (size_t i = 0; i < path.size(); i++) { if (path[i] == L'\\' && i + 1 < path.size() && path[i + 1] == L'\\') i++; fixed += path[i]; }
-        libs.push_back(fixed);
+        addLib(libs, fixed);
     }
     for (auto& lib : libs) {
         WIN32_FIND_DATAW fd; HANDLE h = FindFirstFileW((lib + L"\\steamapps\\common\\SnowRunner*").c_str(), &fd);
@@ -401,7 +410,7 @@ static std::vector<std::wstring> SteamBins() {
         do {
             if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
             std::wstring bin = lib + L"\\steamapps\\common\\" + fd.cFileName + L"\\Sources\\Bin";
-            if (Exists(bin + L"\\SnowRunner.exe") && std::find(out.begin(), out.end(), bin) == out.end()) out.push_back(bin);
+            if (Exists(bin + L"\\SnowRunner.exe") && std::find_if(out.begin(), out.end(), [&](const std::wstring& o) { return samePath(o, bin); }) == out.end()) out.push_back(bin);
         } while (FindNextFileW(h, &fd));
         FindClose(h);
     }

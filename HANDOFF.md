@@ -2,12 +2,14 @@
 
 Written 2026-09-16 01:50, repo section added 02:10, keybinds block 23:40. Durable notes also live in the auto-memory file `snowrunner-dimerge.md` (see `MEMORY.md` in the Claude memory folder); this file is the project-local view. Newest session block first.
 
-## 2026-09-16 23:40: keybinds for 2.0, SMT numbers confirmed
+## 2026-09-16 23:40: keybinds for 2.0, SMT numbers confirmed, pak pre-check, install detection fix
 
 - `tools\keybinds\keybinds.py` now reads the 2.0 log in full: the `+mod2` and higher layer suffixes (the old pattern knew only `+mod`, so the PXN's second layer, 96 to 121, was missing), knob placement lines, and the layer header lines, so a layered button reads "PXNCB1 button 3 with its button 7 held" (or "with GX100 button 14 held", "with wheelbase button 5 held") instead of "with the modifier held". Runs of layered buttons fold into one table row like plain ones. The pak patch note names `dimerge-setup pak` next to the Python script.
 - `docs\KEYBINDS.md` written from the play install (the 01:11 log, the pak, the settings file): 109 merged numbers, 93 slots, 34 bound. Two findings from the bound column: the game accepted a second-layer number (GarageGlobalMap = 121, PXN button 25 with button 6 held), so the `+mod2` layer binds; three numbers carry two slots in different contexts (58 = CraneArrowLower in CRANE and CraneTurnOn in GAME, 52 = AWD and CraneAttachCargo, 53 = DiffLock and CraneAnchor). Whether those doubles are meant is the user's call; the game keeps them apart by context.
 - Open item 2 is closed: the user rewrote `SMT.ini` at 01:12 with the wizard numbers (GX100 gates and collar layer on 9 to 13 and 24 to 33, AWD 40, DIFF LOCK 41, CLUTCH still `SASW.a.4.p`). The clutch index is still right: the 01:11 log shows the add-on tagging the same wheelbase axis instances as under 1.x (X, Y, Rx, Ry, Rz) plus the injected Z, which the proxy enumerates after the wheelbase's own objects, so OIS axis 4 stays Rz.
 - The installed `dinput8.dll` (00:06) and `src\out` (01:49) come from the same sources; nothing in the tree is newer than the installed build. README read with the no-ai-slop rules: nothing to cut.
+- Pak pre-check on the play copy's own pak (`pakfile` into the scratchpad, nothing installed): the C++ tool and `wheel_slots.py` make the same three inserts (the hud set; crane and engine are already there), the patched cache block is byte-identical between the two, all 12253 other entries are untouched, Python's zip test passes; the pak grows by 187 KB because the cache block is recompressed with fixed Huffman (1.21 MB against the game's 1.03 MB). The menu itself (`dimerge-setup pak`, driven with a pick and `q`) reads the real pak and reports crane present, engine present, hud missing. What is left for the game to prove is only that it reads the C++-written stream.
+- Detection bug found by that run and fixed in both tools: every install was listed twice, once through the registry's `c:/program files (x86)/steam` spelling and once through the canonical path in `libraryfolders.vdf`, because the two were compared as plain strings; `wheel_slots.py` also matched the folder name case-sensitively, so the vanilla install, spelled `Snowrunner` on disk, was missing from its list, and it sorted case-sensitively. Now one spelling, paths compared without case, folder names matched and sorted without case. `dimerge-setup.exe` rebuilt (497664 bytes) and copied to `test\`; the install picker uses the same scan. On this PC the pak menu lists the vanilla install as 1 and the play copy as 2, so the play copy needs an explicit 2 (Enter takes 1).
 - Untouched: the play install, the settings file, the pak.
 
 ## 2026-09-16 02:10: repository created
@@ -74,7 +76,7 @@ The mod.io drop-in for 1.x was exported from the vanilla install (`steamapps\com
 
 ## Open items
 
-1. Field test in the game: a cross-device modifier (a PXN button layering the GX100), a knob on a camera axis, the `[p]` menu adding `hud` to the play copy, and the game accepting the C++-written pak. Seen so far in the settings file: a second own-device layer number binds (GarageGlobalMap = 121).
+1. Field test in the game: a cross-device modifier (a PXN button layering the GX100), a knob on a camera axis, the `[p]` menu adding `hud` to the play copy (pick 2 on this PC), and the game accepting the C++-written pak (the file itself is verified against the Python patch, see the 23:40 block). Seen so far in the settings file: a second own-device layer number binds (GarageGlobalMap = 121).
 2. Release: make the repo public when the user says so, date the CHANGELOG header and run `tools\release.ps1` for v2.0.0, rebuild the mod.io drop-in with `pakexport` from the vanilla pak once `hud` is confirmed in the game.
 3. Nice to have: dynamic Huffman in the deflate (smaller pak).
 4. After the next rebinding: `python tools\keybinds\keybinds.py --bin "<SnowRunner5>\Sources\Bin" --out docs\KEYBINDS.md`.
