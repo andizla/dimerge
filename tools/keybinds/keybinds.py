@@ -2,8 +2,9 @@
 """keybinds: writes KEYBINDS.md, a reference of what the merged wheel can bind in SnowRunner.
 
 Sources: the game's initial.pak (the binding slots a custom wheel gets and their English names), dimerge.log
-(which merged number is which physical control, from the proxy's own placement lines), the Steam cloud
-user_settings.cfg (what is bound right now) and every Context.Action input link the game data mentions.
+(which merged number is which physical control, from the proxy's own placement lines: buttons, shift layers,
+hats turned into buttons, axes and knobs), the Steam cloud user_settings.cfg (what is bound right now) and
+every Context.Action input link the game data mentions.
 
   keybinds.py [--bin <Sources\\Bin>] [--cfg <user_settings.cfg>] [--out KEYBINDS.md]
 
@@ -43,13 +44,30 @@ def read_ini(path):
 
 
 def number_map_from_log(path):
-    """merged key number -> physical control, from the proxy's placement lines:
-    '  Section  button 3  -> game button slot 67 ...', '  Section  hat 0  up  -> game button slot 90 ...'"""
-    m = {}
-    pat = re.compile(r"^\s*(\S+)\s+(axis|button|hat)\s+(\d+)\s*(\+mod|up|right|down|left)?\s*-> game (axis|button|hat)\s+slot (\d+)")
+    """merged key number -> physical control, from the proxy's log. The config echo names each section's shift
+    layers in file order ('merge GX100: shift layer: modifier own button 14, shifted buttons from 24'); the
+    placement lines say where every input landed ('  GX100  button 3  +mod  -> game button slot 27' for the first
+    layer, '+mod2' for the second, '  PXNCB1  hat 0  up  -> game button slot 66', '  PXNCB1  knob  20 /21  ->
+    game axis  slot 3')."""
+    m, layers = {}, {}
+    layer_pat = re.compile(r"^\s*merge (\S+): shift layer: modifier (\S+) button (\d+), shifted buttons from (\d+)")
+    place_pat = re.compile(r"^\s*(\S+)\s+(axis|button|hat)\s+(\d+)\s*(\+mod\d*|up|right|down|left)?\s*-> game (axis|button|hat)\s+slot (\d+)")
+    knob_pat = re.compile(r"^\s*(\S+)\s+knob\s+(\d+)\s*/\s*(\d+)\s*-> game axis\s+slot (\d+)")
     for line in open(path, encoding="utf-8", errors="replace"):
         line = re.sub(r"^\S+ \[\d+\] ", "", line.rstrip())    # time and thread id
-        g = pat.match(line)
+        g = layer_pat.match(line)
+        if g:
+            sec, owner, button = g.group(1), g.group(2), int(g.group(3))
+            desc = " with %s button %d held" % ("its" if owner == "own" else owner, button)
+            if desc not in layers.setdefault(sec, []):
+                layers[sec].append(desc)
+            continue
+        g = knob_pat.match(line)
+        if g:
+            sec, left, right, slot = g.group(1), int(g.group(2)), int(g.group(3)), int(g.group(4))
+            m[128 + slot] = "%s knob, buttons %d and %d (%s)" % (sec, left, right, AXES[slot])
+            continue
+        g = place_pat.match(line)
         if not g:
             continue
         sec, kind, idx, extra, gkind, slot = g.group(1), g.group(2), int(g.group(3)), g.group(4) or "", g.group(5), int(g.group(6))
@@ -58,7 +76,11 @@ def number_map_from_log(path):
         elif kind == "hat":
             what = "%s hat %d %s" % (sec, idx, extra)
         else:
-            what = "%s button %d%s" % (sec, idx, " with the modifier held" if extra == "+mod" else "")
+            what = "%s button %d" % (sec, idx)
+            if extra.startswith("+mod"):
+                n = int(extra[4:] or 1)    # +mod is the section's first layer, +mod2 its second
+                known = layers.get(sec, [])
+                what += known[n - 1] if n <= len(known) else " with modifier %d held" % n
         if gkind == "button":
             m[slot] = what
         elif gkind == "axis":
@@ -165,6 +187,24 @@ def steam_cfg():
     return None
 
 
+def number_rows(nmap, primary):
+    """table rows of (first number, last number, text): runs of one device's plain or layered buttons on
+    consecutive numbers fold into one row"""
+    rows = []   # [first number, last number, device, layer suffix, first button, last button, text]
+    for k in sorted(set(list(nmap.keys()) + [128, 136, 137, 138, 139])):
+        d = describe(k, nmap, primary)
+        g = re.match(r"^(.*?) button (\d+)((?: with .*)?)$", d)
+        if g and rows and rows[-1][1] == k - 1 and rows[-1][2] == g.group(1) and rows[-1][3] == g.group(3) and rows[-1][5] == int(g.group(2)) - 1:
+            rows[-1][1] = k
+            rows[-1][5] = int(g.group(2))
+        else:
+            rows.append([k, k, g.group(1) if g else None, g.group(3) if g else "", int(g.group(2)) if g else 0, int(g.group(2)) if g else 0, d])
+    out = []
+    for a, b, dev, suffix, first, last, d in rows:
+        out.append((a, b, d if a == b else "%s buttons %d to %d%s" % (dev, first, last, suffix)))
+    return out
+
+
 def main():
     args = sys.argv[1:]
     bin_dir = cfg = None
@@ -209,23 +249,10 @@ def main():
              % (datetime.date.today().isoformat(), pak, log if nmap else "no dimerge.log (numbers of the merged controls unknown)", cfg or "no settings file"))
     o.append("\n## Merged key numbers\n\nThe game stores a wheel binding as a key number: buttons 0 to 127, axes 128 to 135 (X, Y, Z, Rx, Ry, Rz, Slider0, Slider1), hat directions 136 to 139 (up, right, down, left). What the proxy put on each number in its last run:\n")
     o.append("\n| Number | Physical control |\n|---|---|\n")
-    used = sorted(set(list(nmap.keys()) + [128, 136, 137, 138, 139]))
-    rows = []
-    for k in used:
-        d = describe(k, nmap, primary)
-        generic = re.match(r"^(.*) button (\d+)$", d)
-        if rows and generic and rows[-1][1] == k - 1 and rows[-1][2] == generic.group(1) and rows[-1][4] == int(generic.group(2)) - 1:
-            rows[-1][1] = k
-            rows[-1][4] = int(generic.group(2))
-        else:
-            rows.append([k, k, generic.group(1) if generic else None, d, int(generic.group(2)) if generic else 0])
-    for a, b, base, d, last in rows:
-        if a == b:
-            o.append("| %d | %s |\n" % (a, d))
-        else:
-            o.append("| %d to %d | %s buttons %d to %d |\n" % (a, b, base, last - (b - a), last))
+    for a, b, text in number_rows(nmap, primary):
+        o.append("| %s | %s |\n" % (str(a) if a == b else "%d to %d" % (a, b), text))
     o.append("| other 0 to 127 | %s buttons, native |\n" % primary)
-    o.append("\n## Binding slots of a custom wheel\n\nEvery slot the settings menu offers for a wheel the game does not know by vendor id. Slots marked added come from tools/pakpatch/wheel_slots.py; the stock game has no wheel slot for moving the crane, entering crane mode, the engine or the HUD toggle.\n")
+    o.append("\n## Binding slots of a custom wheel\n\nEvery slot the settings menu offers for a wheel the game does not know by vendor id. Slots marked added come from the pak patch (`dimerge-setup pak` or tools/pakpatch/wheel_slots.py): the stock game has no wheel slot for moving the crane, entering crane mode, attaching cargo, the anchor or the HUD toggle, and its engine slot is empty until the patch completes it.\n")
     o.append("\n| Slot | Menu name | Game input | Context | Bound now |\n|---|---|---|---|---|\n")
     for s in slots:
         b = bound.get(s["name"])
@@ -238,7 +265,7 @@ def main():
     stray = [k for k in bound if k not in {s["name"] for s in slots}]
     if stray:
         o.append("\nBound in the settings file but not a slot any more: %s.\n" % ", ".join(stray))
-    o.append("\n## Every input link in the game data\n\nAll Context.Action names the game data mentions (HUD hints, presets, menus). A wheel slot targets one of these; anything without a slot above is keyboard or gamepad only for a custom wheel unless a slot is added the way wheel_slots.py does it.\n")
+    o.append("\n## Every input link in the game data\n\nAll Context.Action names the game data mentions (HUD hints, presets, menus). A wheel slot targets one of these; anything without a slot above is keyboard or gamepad only for a custom wheel unless a slot is added the way the pak patch does it.\n")
     for ctx in sorted(links):
         o.append("\n- **%s**: %s\n" % (ctx, ", ".join(sorted(links[ctx]))))
     open(out, "w", encoding="utf-8", newline="\n").write("".join(o))

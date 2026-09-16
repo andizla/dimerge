@@ -1,6 +1,14 @@
 # dimerge 2.0 handoff
 
-Written 2026-09-16 01:50, repo section added 02:10. Durable notes also live in the auto-memory file `snowrunner-dimerge.md` (see `MEMORY.md` in the Claude memory folder); this file is the project-local view. Newest session block first.
+Written 2026-09-16 01:50, repo section added 02:10, keybinds block 23:40. Durable notes also live in the auto-memory file `snowrunner-dimerge.md` (see `MEMORY.md` in the Claude memory folder); this file is the project-local view. Newest session block first.
+
+## 2026-09-16 23:40: keybinds for 2.0, SMT numbers confirmed
+
+- `tools\keybinds\keybinds.py` now reads the 2.0 log in full: the `+mod2` and higher layer suffixes (the old pattern knew only `+mod`, so the PXN's second layer, 96 to 121, was missing), knob placement lines, and the layer header lines, so a layered button reads "PXNCB1 button 3 with its button 7 held" (or "with GX100 button 14 held", "with wheelbase button 5 held") instead of "with the modifier held". Runs of layered buttons fold into one table row like plain ones. The pak patch note names `dimerge-setup pak` next to the Python script.
+- `docs\KEYBINDS.md` written from the play install (the 01:11 log, the pak, the settings file): 109 merged numbers, 93 slots, 34 bound. Two findings from the bound column: the game accepted a second-layer number (GarageGlobalMap = 121, PXN button 25 with button 6 held), so the `+mod2` layer binds; three numbers carry two slots in different contexts (58 = CraneArrowLower in CRANE and CraneTurnOn in GAME, 52 = AWD and CraneAttachCargo, 53 = DiffLock and CraneAnchor). Whether those doubles are meant is the user's call; the game keeps them apart by context.
+- Open item 2 is closed: the user rewrote `SMT.ini` at 01:12 with the wizard numbers (GX100 gates and collar layer on 9 to 13 and 24 to 33, AWD 40, DIFF LOCK 41, CLUTCH still `SASW.a.4.p`). The clutch index is still right: the 01:11 log shows the add-on tagging the same wheelbase axis instances as under 1.x (X, Y, Rx, Ry, Rz) plus the injected Z, which the proxy enumerates after the wheelbase's own objects, so OIS axis 4 stays Rz.
+- The installed `dinput8.dll` (00:06) and `src\out` (01:49) come from the same sources; nothing in the tree is newer than the installed build. README read with the no-ai-slop rules: nothing to cut.
+- Untouched: the play install, the settings file, the pak.
 
 ## 2026-09-16 02:10: repository created
 
@@ -8,7 +16,7 @@ Written 2026-09-16 01:50, repo section added 02:10. Durable notes also live in t
 
 ## What this folder is
 
-`C:\Games\dimerge2` is the 2.0 tree of dimerge, the SnowRunner `dinput8.dll` proxy that merges several DirectInput devices into the force-feedback wheel. It was started on 2026-09-15 as its own folder so the 1.x project (`C:\Games\SnowRunner-dimerge`, still complete and untouched) stays available if 2.0 is dropped. The user (handle andizla) plans a public release; no git repo has been initialised yet, and pushing anywhere is the user's call.
+`C:\Games\dimerge2` is the 2.0 tree of dimerge, the SnowRunner `dinput8.dll` proxy that merges several DirectInput devices into the force-feedback wheel. It was started on 2026-09-15 as its own folder so the 1.x project (`C:\Games\SnowRunner-dimerge`, still complete and untouched) stays available if 2.0 is dropped. The user (handle andizla) plans a public release from the private repo `andizla/dimerge` (see Repo and workflow); making it public is the user's call.
 
 ```
 src\                 the proxy: dimerge.h, dimerge_config.cpp, dimerge_main.cpp, dimerge_device.cpp, dinput8.def, build.bat -> src\out\dinput8.dll
@@ -20,7 +28,7 @@ tools\package.ps1    builds everything and writes release\dimerge-2.0\ + release
 tools\release.ps1    tags the pushed commit and publishes a GitHub release with the zip (see Repo and workflow)
 test\                scratch: dinput8.dll + dienum.exe + dimerge-setup.exe + a dimerge.ini with three layer kinds and two knobs, for offline proxy checks (only the ini is tracked)
 README.md, LICENSE, CHANGELOG.md   the release docs (MIT)
-docs\                README-1.x.md and KEYBINDS-1.x.md, reference copies from 1.x
+docs\                KEYBINDS.md (generated for this rig, 2.0 numbers), README-1.x.md and KEYBINDS-1.x.md (reference copies from 1.x)
 release\             the current package (not tracked; the zip ships through GitHub Releases)
 ```
 
@@ -61,16 +69,15 @@ The mod.io drop-in for 1.x was exported from the vanilla install (`steamapps\com
 
 ## The user's play install right now
 
-- `steamapps\common\SnowRunner5\Sources\Bin`: `dinput8.dll` = 2.0 proxy; `dimerge.ini` = a wizard ini (GX100 buttons from 8 with collar layer at 24, PXN buttons from 40, joystick as buttons 66..69, two PXN-button layers at 70 and 96, pedals `X->Y,Y->Z,Z->Rz`, `DeadAxes=Y,Rx,Ry,Rz,Slider0,Slider1`); the 1.x ini is `dimerge.ini.bak` there. Everything was rebound in the game menu to the new numbers. SMT runs as the pinned ReShade add-on `SMT.addon64`; its `SMT.ini` names buttons by the old numbers (`SASW.b.96` etc.) and may need updating to the new ones.
+- `steamapps\common\SnowRunner5\Sources\Bin`: `dinput8.dll` = 2.0 proxy; `dimerge.ini` = a wizard ini (GX100 buttons from 8 with collar layer at 24, PXN buttons from 40, joystick as buttons 66..69, two PXN-button layers at 70 and 96, pedals `X->Y,Y->Z,Z->Rz`, `DeadAxes=Y,Rx,Ry,Rz,Slider0,Slider1`); the 1.x ini is `dimerge.ini.bak` there. Everything was rebound in the game menu to the new numbers. SMT runs as the pinned ReShade add-on `SMT.addon64`; the user rewrote its `SMT.ini` with the wizard numbers on 2026-09-16 01:12.
 - Steam settings file `userdata\72265044\1465360\remote\user_settings.cfg`: on 2026-09-16 01:09 the three axis slots Camera Rotation X/Y and Camera Zoom were cut out with `C:\Games\SnowRunner-dimerge\tools\steam\restore_settings.py` (Steam closed; backups in `C:\Games\SnowRunner-dimerge\extras`, stamp 20260916-010905). That fixed the camera following the clutch, confirmed by the user. Rule: never bind a button number to an axis slot (camera rotation, zoom, minimap movement); the menu's unbind does not always remove the entry, the restore script route does; never hand-edit the cfg without it (Steam's `remotecache.vdf` record must match or the game resets all settings). Launching through Steam after a restore shows "Unable to Sync" once; Play anyway, or launch outside Steam as the user normally does.
 
 ## Open items
 
-1. Field test in the game: a cross-device modifier (PXN button layering the GX100), a knob on a camera axis, the `[p]` menu adding `hud` to the play copy, and the game accepting the C++-written pak.
-2. `SMT.ini` button names after the renumbering (1.x used `SASW.b.96`.. for gates, `.112`.. for the collar layer).
-3. `keybinds.py` against the 2.0 log to regenerate `KEYBINDS.md` for the new numbers (`python tools\keybinds\keybinds.py --bin "<SnowRunner5>\Sources\Bin"`).
-4. Release: make the repo public when the user says so, date the CHANGELOG header and run `tools\release.ps1` for v2.0.0, rebuild the mod.io drop-in with `pakexport` from the vanilla pak once `hud` is confirmed in the game, README pass with the no-ai-slop skill before publishing.
-5. Nice to have: dynamic Huffman in the deflate (smaller pak).
+1. Field test in the game: a cross-device modifier (a PXN button layering the GX100), a knob on a camera axis, the `[p]` menu adding `hud` to the play copy, and the game accepting the C++-written pak. Seen so far in the settings file: a second own-device layer number binds (GarageGlobalMap = 121).
+2. Release: make the repo public when the user says so, date the CHANGELOG header and run `tools\release.ps1` for v2.0.0, rebuild the mod.io drop-in with `pakexport` from the vanilla pak once `hud` is confirmed in the game.
+3. Nice to have: dynamic Huffman in the deflate (smaller pak).
+4. After the next rebinding: `python tools\keybinds\keybinds.py --bin "<SnowRunner5>\Sources\Bin" --out docs\KEYBINDS.md`.
 
 ## Tooling notes for the next session
 
