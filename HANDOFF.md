@@ -1,6 +1,10 @@
 # dimerge 2.0 handoff
 
-Written 2026-09-16 01:50. Durable notes also live in the auto-memory file `snowrunner-dimerge.md` (see `MEMORY.md` in the Claude memory folder); this file is the project-local view.
+Written 2026-09-16 01:50, repo section added 02:10. Durable notes also live in the auto-memory file `snowrunner-dimerge.md` (see `MEMORY.md` in the Claude memory folder); this file is the project-local view. Newest session block first.
+
+## 2026-09-16 02:10: repository created
+
+`andizla/dimerge` on GitHub, private, branch `main`, first commit b18237f with 24 tracked files (sources, tools, docs; binaries, `release\` and the `test\` scratch except its ini are ignored). `tools\release.ps1` and `CHANGELOG.md` added; `README-1.x.md` and `KEYBINDS-1.x.md` moved to `docs\`. Nothing released yet: the CHANGELOG header still says unreleased on purpose, and the release script refuses until it is dated.
 
 ## What this folder is
 
