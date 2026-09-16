@@ -1,0 +1,16 @@
+# build outputs; the release zip goes to GitHub Releases
+src/out/
+*.obj
+*.exp
+*.lib
+*.exe
+*.dll
+release/
+
+# scratch folder for offline proxy checks; its ini stays as the sample that uses every feature
+test/*
+!test/dimerge.ini
+
+__pycache__/
+*.log
+.claude/
