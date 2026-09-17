@@ -86,7 +86,7 @@ A wheel the game does not know by vendor id gets the "Custom" preset, and the co
 
 `dimerge-setup pakfile <initial.pak> <out.pak> [sets]` patches a copy instead, and `dimerge-setup pakexport <initial.pak> <folder> [sets]` writes the patched `initial.cache_block` and `[strings]` files as loose files, the drop-in package for people who drag them into `initial.pak` with WinRAR. Build those from the vanilla Steam install, not from a modded pak. The repository holds the same patch as a Python script, `tools\pakpatch\wheel_slots.py`.
 
-`tools\keybinds\keybinds.py` in the repository writes `KEYBINDS.md`: every slot the wheel can bind with its menu name, game input and context, what is bound right now, which merged number is which physical control (from `dimerge.log`), and every input link the game data mentions. `docs\KEYBINDS.md` is that file for the rig dimerge was built on.
+`tools\keybinds\keybinds.py` in the repository writes `KEYBINDS.md`: every slot the wheel can bind with its menu name, game input and context, what is bound right now, which merged number is which physical control (from `dimerge.log`), and every input link the game data mentions.
 
 ## Checking a run
 

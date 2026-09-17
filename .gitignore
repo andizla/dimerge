@@ -14,3 +14,7 @@ test/*
 __pycache__/
 *.log
 .claude/
+
+# working notes and files generated from one rig's install: local only
+HANDOFF.md
+docs/
