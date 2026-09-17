@@ -1,6 +1,7 @@
 // dimerge-setup: the console wizard and installer for dimerge.
 //
-//   dimerge-setup              wizard: pick the wheel and the devices to merge, learn their controls, write dimerge.ini
+//   dimerge-setup              start screen: 1 runs the wizard (pick the wheel and the devices to merge, learn their
+//                              controls, write dimerge.ini), 2 adds the wheel binding slots to the game's initial.pak
 //   dimerge-setup list         every attached game controller with its instance id
 //   dimerge-setup test [s]     watch the merged wheel through the dinput8.dll next to this program
 //   dimerge-setup install [Bin folder]     copy the proxy and ini into the game's Bin (found through Steam when omitted)
@@ -23,6 +24,7 @@
 #include <algorithm>
 #include <fstream>
 #include <sstream>
+#include "../../src/dimerge.h"   // DIMERGE_VERSION, for the start screen
 #pragma comment(lib, "dinput8.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "advapi32.lib")
@@ -48,6 +50,9 @@ static std::vector<Dev> g_devs;
 
 static std::wstring ExeDir() { wchar_t p[MAX_PATH]; GetModuleFileNameW(nullptr, p, MAX_PATH); PathRemoveFileSpecW(p); return std::wstring(p) + L"\\"; }
 static bool Exists(const std::wstring& p) { return GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES; }
+// Started by a double-click, the program owns its console window, which closes with it and takes the last screen
+// along; started from a shell, the shell shares the console. GetConsoleProcessList counts the processes on it.
+static bool OwnsWindow() { DWORD pids[2]; return GetConsoleProcessList(pids, 2) == 1; }
 static std::wstring GuidText(const GUID& g) { wchar_t b[64]; StringFromGUID2(g, b, 64); return b; }
 static WORD Vid(const Dev& d) { return LOWORD(d.product.Data1); }
 static WORD Pid(const Dev& d) { return HIWORD(d.product.Data1); }
@@ -198,10 +203,12 @@ static int Test(int seconds);
 static int Install(int argc, wchar_t** argv);
 
 static int Wizard() {
-    wprintf(L"dimerge setup\n=============\nPlug in and switch on every controller first. Attached game controllers:\n");
+    wprintf(L"\nMerge controllers\n=================\n");
+    Ask(L"Plug in and switch on every controller, then press Enter", L"");
+    wprintf(L"Attached game controllers:\n");
     if (!Enumerate()) return 1;
     List();
-    if (g_devs.size() < 2) { wprintf(L"\nMerging needs at least two devices. Nothing written.\n"); return 1; }
+    if (g_devs.size() < 2) { wprintf(L"\nMerging needs at least two controllers. Nothing written.\n"); return 1; }
     wprintf(L"\nAnswer with the ID from the first column. Enter alone takes the value in brackets.\n");
     int ffCount = 0, ffIdx = 0; for (size_t i = 0; i < g_devs.size(); i++) if (g_devs[i].ff) { ffCount++; ffIdx = (int)i + 1; }
     wchar_t def[16] = L""; if (ffCount == 1) swprintf_s(def, L"%d", ffIdx);
@@ -343,7 +350,7 @@ static int Wizard() {
     f.close();
     wprintf(L"\nWritten: %s\n", out.c_str());
     for (;;) {
-        std::wstring c = Ask(L"\nNext: [t] show the merged wheel live for 15 s, [i] install into the game, [p] add wheel binding slots to the game's initial.pak, [q] quit", L"q");
+        std::wstring c = Ask(L"\nNext: [t] show the merged wheel live for 15 s   [i] install into the game\n      [p] add crane, engine and HUD rows to the wheel bindings   [q] quit", L"q");
         if (c == L"t" || c == L"T") Test(15);
         else if (c == L"i" || c == L"I") Install(1, nullptr);
         else if (c == L"p" || c == L"P") PakSlotsMenu();
@@ -426,20 +433,44 @@ static bool IsDimerge(const std::wstring& dll) {
     std::string data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     return data.find("dimerge " ) != std::string::npos && data.find("dimerge.ini") != std::string::npos;
 }
+// A pasted path made into the game folder: quotes and slashes tidied, a trailing Sources\Bin, preload\paks\client or
+// initial.pak stripped. Empty when no SnowRunner lives there.
+static std::wstring GameFolderOf(std::wstring p) {
+    p.erase(std::remove(p.begin(), p.end(), L'"'), p.end());
+    for (auto& c : p) if (c == L'/') c = L'\\';
+    while (!p.empty() && (p.back() == L'\\' || p.back() == L' ')) p.pop_back();
+    auto strip = [&](const wchar_t* tail) { size_t n = wcslen(tail); if (p.size() > n && _wcsicmp(p.c_str() + p.size() - n, tail) == 0) p.resize(p.size() - n); };
+    strip(L"\\initial.pak"); strip(L"\\preload\\paks\\client"); strip(L"\\Sources\\Bin");
+    if (p.empty()) return L"";
+    return Exists(p + L"\\Sources\\Bin\\SnowRunner.exe") || Exists(p + L"\\preload\\paks\\client\\initial.pak") ? p : L"";
+}
+// The game folder: the Steam installs as a numbered list, or a pasted path at any prompt (the Epic version, a
+// library Steam does not list). Empty when the user quits or no one is at the keyboard.
+std::wstring PickGameFolder() {   // pak_slots.cpp asks for it too
+    std::vector<std::wstring> games = SteamGameFolders();
+    if (games.empty()) wprintf(L"SnowRunner was not found through Steam.\n");
+    else { wprintf(L"Game folder%s found:\n", games.size() > 1 ? L"s" : L""); for (size_t i = 0; i < games.size(); i++) wprintf(L"  %zu  %s\n", i + 1, games[i].c_str()); }
+    for (;;) {
+        std::wstring a = games.empty() ? Ask(L"Paste the path of the game folder (the one that contains the preload folder), or\ntype q to quit", L"")
+            : Ask(games.size() > 1 ? L"Type the number, or paste a folder path" : L"Press Enter to use it, or paste another folder path", L"1");
+        if (a == L"q" || a == L"Q" || feof(stdin)) return L"";
+        if (!games.empty() && a.find(L'\\') == std::wstring::npos && a.find(L'/') == std::wstring::npos) { std::vector<int> n = Numbers(a, (int)games.size()); if (!n.empty()) return games[n[0] - 1]; }
+        std::wstring g = GameFolderOf(a);
+        if (!g.empty()) return g;
+        wprintf(L"No SnowRunner under that path: neither preload\\paks\\client\\initial.pak nor Sources\\Bin\\SnowRunner.exe is there.\n");
+    }
+}
 static std::wstring PickBin(int argc, wchar_t** argv) {
     if (argc > 2) return argv[2];
-    std::vector<std::wstring> bins = SteamBins();
-    if (bins.empty()) { wprintf(L"No SnowRunner install found through Steam. Give the Bin folder as an argument.\n"); return L""; }
-    wprintf(L"Game folders found:\n"); for (size_t i = 0; i < bins.size(); i++) wprintf(L"  %zu  %s\n", i + 1, bins[i].c_str());
-    std::vector<int> n = Numbers(Ask(L"Install into", L"1"), (int)bins.size());
-    return n.empty() ? L"" : bins[n[0] - 1];
+    std::wstring game = PickGameFolder();
+    return game.empty() ? L"" : game + L"\\Sources\\Bin";
 }
 static int Install(int argc, wchar_t** argv) {
     std::wstring bin = PickBin(argc, argv); if (bin.empty()) return 1;
     if (bin.back() != L'\\') bin += L'\\';
     std::wstring src = ExeDir();
-    if (!Exists(src + L"dinput8.dll")) { wprintf(L"dinput8.dll is missing next to dimerge-setup.exe\n"); return 1; }
-    if (!Exists(src + L"dimerge.ini")) { wprintf(L"dimerge.ini is missing next to dimerge-setup.exe; run the wizard first\n"); return 1; }
+    if (!Exists(src + L"dinput8.dll")) { wprintf(L"dinput8.dll is not next to dimerge-setup.exe. Unzip the whole download into a folder\nand run dimerge-setup.exe from there.\n"); return 1; }
+    if (!Exists(src + L"dimerge.ini")) { wprintf(L"dimerge.ini is not next to dimerge-setup.exe. Run option 1 first, it writes that file.\n"); return 1; }
     std::wstring existing = bin + L"dinput8.dll";
     bool chained = Exists(bin + L"dinput8_chain.dll");   // a previous install already moved the folder's own proxy aside
     if (Exists(existing) && !IsDimerge(existing)) {
@@ -471,7 +502,23 @@ static int Uninstall(int argc, wchar_t** argv) {
     return 0;
 }
 
-int wmain(int argc, wchar_t** argv) {
+// What a double-click opens: the two things the tool does, chosen by number. No default, so an Enter pressed out of
+// habit lands nowhere; no one at the keyboard ends it.
+static int StartScreen() {
+    std::wstring title = L"dimerge setup " DIMERGE_VERSION;
+    wprintf(L"%s\n%s\n", title.c_str(), std::wstring(title.size(), L'=').c_str());
+    wprintf(L"  1  Merge pedals, a shifter, a button box or a joystick into the steering wheel.\n"
+            L"     Learns the devices, writes dimerge.ini and installs the proxy into the game.\n"
+            L"  2  Add crane, engine and HUD rows to the game's steering wheel bindings.\n"
+            L"     Changes initial.pak and keeps the untouched pak next to it. Works without 1.\n");
+    for (;;) {
+        std::wstring c = Ask(L"\nType 1 or 2 and press Enter", L"");
+        if (c == L"1") return Wizard();
+        if (c == L"2") return PakSlotsMenu();
+        if (feof(stdin)) return 1;
+    }
+}
+static int Run(int argc, wchar_t** argv) {
     std::wstring cmd = argc > 1 ? argv[1] : L"";
     if (cmd == L"list") { if (!Enumerate()) return 1; List(); return 0; }
     if (cmd == L"test") return Test(argc > 2 ? _wtoi(argv[2]) : 15);
@@ -479,5 +526,11 @@ int wmain(int argc, wchar_t** argv) {
     if (cmd == L"uninstall") return Uninstall(argc, argv);
     if (cmd == L"pak" || cmd == L"pakfile" || cmd == L"pakexport") return PakCommand(argc, argv);
     if (!cmd.empty()) { wprintf(L"usage: dimerge-setup [list | test [seconds] | install [Bin] | uninstall [Bin] | pak | pakfile <in> <out> [sets] | pakexport <in> <folder> [sets]]\n"); return 1; }
-    return Wizard();
+    return StartScreen();
+}
+int wmain(int argc, wchar_t** argv) {
+    bool own = OwnsWindow();
+    int rc = Run(argc, argv);
+    if (own) { wprintf(L"\nPress Enter to close."); wchar_t b[8]; fgetws(b, 8, stdin); }
+    return rc;
 }

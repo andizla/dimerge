@@ -1,4 +1,5 @@
-// pak_slots.cpp: adds wheel binding slots to SnowRunner's initial.pak, from the wizard's menu or the command line.
+// pak_slots.cpp: adds wheel binding slots to SnowRunner's initial.pak, from the start screen, the wizard's menu or the
+// command line.
 //
 //   dimerge-setup pak                        menu: pick the install, see which sets it carries, add or restore
 //   dimerge-setup pakfile <in> <out> [sets]  patch a copy of a pak (for a release build from the vanilla install)
@@ -20,7 +21,7 @@
 #include <fstream>
 #include <algorithm>
 
-std::vector<std::wstring> SteamGameFolders();   // dimerge-setup.cpp
+std::wstring PickGameFolder();   // dimerge-setup.cpp: the Steam installs as a list, or a pasted path; empty when the user quits
 
 namespace {
 
@@ -313,10 +314,10 @@ bool Verify(const std::vector<uint8_t>& bytes, const Zip& orig, const std::vecto
 
 // ---------- the slot sets
 struct SlotDef { const char* name; const char* key; const char* text; const char* target; const char* dir; const char* ctx; };   // text null: the key exists in the game; dir null: forward vector, "ACTION": plain action
-struct SetDef { const char* name; const char* about; const char* after; std::vector<SlotDef> slots; std::vector<const char*> unhide; bool engine; };
+struct SetDef { const char* name; const char* about; const char* rows; const char* after; std::vector<SlotDef> slots; std::vector<const char*> unhide; bool engine; };   // about: the menu line; rows: where the new rows show up in the game
 const std::vector<SetDef>& Sets() {
     static const std::vector<SetDef> s = {
-        { "crane", "moving the crane, crane mode, attaching cargo and the anchor", "CraneArrowLower", {
+        { "crane", "moving the crane, crane mode, attaching cargo and the anchor", "crane movement, crane mode, attach cargo and anchor, in the crane section", "CraneArrowLower", {
             { "CraneMoveForward", "UI_SETTINGS_CONTROL_LAYOUT_ACTION_CRANE_MOVE_FORWARD", "Move Crane Forward", "Crane.moveXZplane", nullptr, "CRANE" },
             { "CraneMoveBackward", "UI_SETTINGS_CONTROL_LAYOUT_ACTION_CRANE_MOVE_BACKWARD", "Move Crane Backward", "Crane.moveXZplane", "BACKWARD", "CRANE" },
             { "CraneMoveLeft", "UI_SETTINGS_CONTROL_LAYOUT_ACTION_CRANE_MOVE_LEFT", "Move Crane Left", "Crane.moveXZplane", "LEFT", "CRANE" },
@@ -325,8 +326,8 @@ const std::vector<SetDef>& Sets() {
             { "CraneAttachCargo", "UI_SETTINGS_CONTROL_LAYOUT_ACTION_CRANE_ATTACH", "Attach or Detach Cargo", "Crane.AttachCargo", "ACTION", "CRANE" },
             { "CraneAnchor", "UI_SETTINGS_CONTROL_LAYOUT_ACTION_CRANE_ANCHOR", "Crane Anchor", "Crane.EnableAnchor", "ACTION", "CRANE" } },
           { "UI_CRANE_ANCHOR" }, false },
-        { "engine", "the engine start/stop slot the stock data carries but never shows", nullptr, {}, {}, true },
-        { "hud", "the HUD toggle (keyboard H)", "ToggleGameCamera", {
+        { "engine", "engine start and stop", "Engine, after Headlights", nullptr, {}, {}, true },
+        { "hud", "the HUD toggle (H on the keyboard)", "HUD, after Toggle Camera", "ToggleGameCamera", {
             { "HudVisibility", "UI_SETTINGS_CONTROL_LAYOUT_ACTION_CUSTOM_ADDON_ACTION_HUD_VISIBILITY", nullptr, "Exploration.ToggleHudVisibility", "ACTION", "GAME" } },
           {}, false },
     };
@@ -522,57 +523,68 @@ std::vector<const SetDef*> PickSets(const std::string& list) {
     }
     return out;
 }
-bool Locked(const std::wstring& path) {
+// 0 free, 1 open in another program (the game holds its paks while it runs), 2 not writable
+int Locked(const std::wstring& path) {
     HANDLE h = CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return true;
-    CloseHandle(h); return false;
+    if (h != INVALID_HANDLE_VALUE) { CloseHandle(h); return 0; }
+    return GetLastError() == ERROR_SHARING_VIOLATION ? 1 : 2;
 }
-// Patches the pak in place: backup once, write next to it, read the result back, then swap it in.
-int Apply(const std::wstring& pak, const std::vector<const SetDef*>& sets) {
-    std::vector<uint8_t> bytes; if (!ReadAll(pak, bytes)) { wprintf(L"cannot read %s\n", pak.c_str()); return 1; }
+bool ReportLock(const std::wstring& pak) {
+    int l = Locked(pak);
+    if (l == 1) wprintf(L"The pak is in use. Close SnowRunner and run this again.\n");
+    else if (l == 2) wprintf(L"The pak is not writable. If the game is not running, the game folder is write-protected:\nrun this program as administrator.\n");
+    return l != 0;
+}
+// Patches the pak in place: backup, write next to it, read the result back, then swap it in. 'sets' holds only what
+// the pak lacks. A pak with no set at all is the stock file, so the backup is refreshed from it: after a game update
+// the old backup would put back a pak from the previous game version.
+int Apply(const std::wstring& pak, const std::vector<const SetDef*>& sets, bool stock) {
+    std::vector<uint8_t> bytes; if (!ReadAll(pak, bytes)) { wprintf(L"Cannot read %s\n", pak.c_str()); return 1; }
     Zip z; std::vector<Replacement> reps; std::string log, err;
     if (!Prepare(bytes, sets, z, reps, log, err)) { printf("%s\n", err.c_str()); return 1; }
-    printf("%s", log.c_str());
-    if (reps.empty()) { printf("nothing to do, the pak already carries everything\n"); return 0; }
-    if (Locked(pak)) { printf("the pak is locked, close the game first\n"); return 1; }
+    if (reps.empty()) { wprintf(L"Nothing to add, the pak already has that.\n"); return 0; }
+    if (ReportLock(pak)) return 1;
     std::wstring backup = pak + L".orig";
-    if (!Exists(backup)) { if (!CopyFileW(pak.c_str(), backup.c_str(), TRUE)) { printf("could not write the backup\n"); return 1; } wprintf(L"backup written: %s\n", backup.c_str()); }
+    if (stock || !Exists(backup)) {
+        if (!CopyFileW(pak.c_str(), backup.c_str(), FALSE)) { wprintf(L"Could not save a copy of the pak as initial.pak.orig. Nothing changed.\n"); return 1; }
+        wprintf(stock ? L"Untouched pak saved as initial.pak.orig.\n" : L"Copy of the pak saved as initial.pak.orig (it already carried some sets).\n");
+    }
     std::vector<uint8_t> out;
     DWORD t = GetTickCount();
     if (!Rebuild(z, reps, out, err) || !Verify(out, z, reps, err)) { printf("%s\n", err.c_str()); return 1; }
     std::wstring tmp = pak + L".dimerge-new";
-    if (!WriteAll(tmp, out) || !MoveFileExW(tmp.c_str(), pak.c_str(), MOVEFILE_REPLACE_EXISTING)) { printf("could not write the pak\n"); DeleteFileW(tmp.c_str()); return 1; }
-    wprintf(L"pak rewritten in %.1f s (%zu entries checked): %s\n", (GetTickCount() - t) / 1000.0, z.entries.size(), pak.c_str());
+    if (!WriteAll(tmp, out) || !MoveFileExW(tmp.c_str(), pak.c_str(), MOVEFILE_REPLACE_EXISTING)) { wprintf(L"Could not write the pak. The one in place is unchanged.\n"); DeleteFileW(tmp.c_str()); return 1; }
+    wprintf(L"Pak rewritten in %.1f s.\n", (GetTickCount() - t) / 1000.0);
+    wprintf(L"\nDone. Start the game and open Settings, Controls, steering wheel tab. The new rows:\n");
+    for (const SetDef* st : sets) wprintf(L"  %hs\n", st->rows);
+    wprintf(L"Bind them like the wheel's own buttons. Run this again after a game update.\n");
     return 0;
 }
 int Restore(const std::wstring& pak) {
     std::wstring backup = pak + L".orig";
-    if (!Exists(backup)) { wprintf(L"no backup at %s\n", backup.c_str()); return 1; }
-    if (Locked(pak)) { printf("the pak is locked, close the game first\n"); return 1; }
-    if (!CopyFileW(backup.c_str(), pak.c_str(), FALSE)) { printf("could not copy the backup back\n"); return 1; }
-    wprintf(L"restored %s from %s\n", pak.c_str(), backup.c_str());
+    if (!Exists(backup)) { wprintf(L"There is no initial.pak.orig next to the pak, so nothing to put back. Steam's Verify\nintegrity of game files restores the stock pak.\n"); return 1; }
+    if (ReportLock(pak)) return 1;
+    if (!CopyFileW(backup.c_str(), pak.c_str(), FALSE)) { wprintf(L"Could not copy the untouched pak back.\n"); return 1; }
+    wprintf(L"Untouched pak put back.\n");
     return 0;
 }
-// which sets a pak already carries
-std::string Carried(const std::vector<uint8_t>& bytes, std::string& err) {
-    Zip z; if (!z.Load(bytes, err)) return "";
+// Which sets a pak already carries, one flag per entry of Sets().
+bool Carried(const std::vector<uint8_t>& bytes, std::vector<bool>& present, std::string& err) {
+    Zip z; if (!z.Load(bytes, err)) return false;
     const ZEntry* cache = nullptr; for (auto& e : z.entries) if (e.name == CACHE) cache = &e;
-    if (!cache) { err = "no initial.cache_block in the pak"; return ""; }
-    std::vector<uint8_t> raw; if (!z.Read(*cache, raw, err)) return "";
-    std::string d(raw.begin(), raw.end()); Index ix; if (!ParseIndex(d, ix, err)) return "";
+    if (!cache) { err = "no initial.cache_block in the pak"; return false; }
+    std::vector<uint8_t> raw; if (!z.Read(*cache, raw, err)) return false;
+    std::string d(raw.begin(), raw.end()); Index ix; if (!ParseIndex(d, ix, err)) return false;
     TextEntry mapper(d, ix, "steering_wheel_input_mapper.sso"), settings(d, ix, "ui_settings_controller.sso");
-    if (!mapper.ok || !settings.ok) { err = "the wheel mapper or the settings controller is not in the cache block once"; return ""; }
-    std::string s;
-    for (auto& st : Sets()) {
-        bool have = st.engine ? settings.Has(CtrlHead("StartEngine")) : mapper.Has(SlotHead(st.slots.front().name));
-        s += std::string("  ") + st.name + (have ? ": present" : ": missing") + "\n";
-    }
-    return s;
+    if (!mapper.ok || !settings.ok) { err = "the wheel mapper or the settings controller is not in the cache block once"; return false; }
+    present.clear();
+    for (auto& st : Sets()) present.push_back(st.engine ? settings.Has(CtrlHead("StartEngine")) : mapper.Has(SlotHead(st.slots.front().name)));
+    return true;
 }
 std::wstring PakOf(const std::wstring& game) { return game + L"\\preload\\paks\\client\\initial.pak"; }
 std::wstring AskLine(const wchar_t* prompt, const wchar_t* def) {
     wprintf(L"%s", prompt); if (def && *def) wprintf(L" [%s]", def); wprintf(L": ");
-    wchar_t buf[512] = {}; if (!fgetws(buf, 512, stdin)) return def ? def : L"";
+    wchar_t buf[512] = {}; if (!fgetws(buf, 512, stdin)) { wprintf(L"\n"); return L"q"; }   // no one at the keyboard: quit, never the default
     std::wstring s = buf; while (!s.empty() && (s.back() == L'\n' || s.back() == L'\r' || s.back() == L' ')) s.pop_back();
     return s.empty() && def ? def : s;
 }
@@ -580,25 +592,30 @@ std::wstring AskLine(const wchar_t* prompt, const wchar_t* def) {
 } // namespace
 
 int PakSlotsMenu() {
-    wprintf(L"\nWheel binding slots for initial.pak\n===================================\n");
-    wprintf(L"A wheel the game does not know gets the Custom preset, which can bind only a fixed list of slots. These sets add\nthe missing ones; the rows appear in the steering wheel tab. A game update replaces the pak: run this again then.\n");
-    for (auto& st : Sets()) printf("  %-7s %s\n", st.name, st.about);
-    std::vector<std::wstring> games = SteamGameFolders();
-    if (games.empty()) { wprintf(L"No SnowRunner install found through Steam. Use: dimerge-setup pakfile <initial.pak> <output.pak>\n"); return 1; }
-    wprintf(L"\nGame folders found:\n"); for (size_t i = 0; i < games.size(); i++) wprintf(L"  %zu  %s\n", i + 1, games[i].c_str());
-    int pick = _wtoi(AskLine(L"Patch the pak of", L"1").c_str()); if (pick < 1 || pick > (int)games.size()) pick = 1;
-    std::wstring pak = PakOf(games[pick - 1]);
-    std::vector<uint8_t> bytes; if (!ReadAll(pak, bytes)) { wprintf(L"cannot read %s\n", pak.c_str()); return 1; }
-    std::string err, have = Carried(bytes, err);
-    if (!err.empty()) { printf("%s\n", err.c_str()); return 1; }
-    printf("\nThis pak carries:\n%s", have.c_str());
-    if (Exists(pak + L".orig")) wprintf(L"A copy of the untouched pak exists next to it (initial.pak.orig).\n");
+    wprintf(L"\nWheel binding slots\n===================\n");
+    wprintf(L"A wheel the game does not know by name gets the Custom preset, and that preset can\nbind only a fixed list of controls. This adds the missing rows to the steering wheel\ntab in Settings, Controls:\n\n");
+    for (auto& st : Sets()) wprintf(L"  %-8hs %hs\n", st.name, st.about);
+    wprintf(L"\nIt rewrites initial.pak in the game folder and keeps the untouched pak next to it as\ninitial.pak.orig. A game update puts the stock pak back; run this again afterwards.\n\nClose SnowRunner before you go on.\n\n");
+    std::wstring game = PickGameFolder(); if (game.empty()) return 1;
+    std::wstring pak = PakOf(game);
+    std::vector<uint8_t> bytes; if (!ReadAll(pak, bytes)) { wprintf(L"Cannot read %s\n", pak.c_str()); return 1; }
+    std::vector<bool> present; std::string err;
+    if (!Carried(bytes, present, err)) { printf("%s\n", err.c_str()); return 1; }
+    bool any = false, all = true;
+    wprintf(L"\nThis pak has:\n");
+    for (size_t i = 0; i < Sets().size(); i++) { wprintf(L"  %-8hs %hs\n", Sets()[i].name, present[i] ? "present" : "missing"); any = any || present[i]; all = all && present[i]; }
     for (;;) {
-        std::wstring c = AskLine(L"\n[a] add every missing set  [c] crane only  [e] engine only  [h] hud only  [r] restore the untouched pak  [q] back", L"a");
+        std::wstring c = all ? AskLine(L"\nNothing to add, this pak has every set. [r] puts the untouched pak back, [q] quits", L"q")
+                             : AskLine(L"\n[a] add every missing set   [c] crane only   [e] engine only   [h] hud only\n[r] put the untouched pak back   [q] quit\nEnter alone adds every missing set", L"a");
         if (c == L"q" || c == L"Q") return 0;
         if (c == L"r" || c == L"R") return Restore(pak);
+        if (all) continue;
         std::string list = c == L"c" || c == L"C" ? "crane" : c == L"e" || c == L"E" ? "engine" : c == L"h" || c == L"H" ? "hud" : "";
-        if (c == L"a" || c == L"A" || !list.empty()) return Apply(pak, PickSets(list));
+        if (c != L"a" && c != L"A" && list.empty()) continue;
+        std::vector<const SetDef*> sets;   // the picked sets the pak lacks
+        for (const SetDef* s : PickSets(list)) if (!present[(size_t)(s - &Sets()[0])]) sets.push_back(s);
+        if (sets.empty()) { wprintf(L"Nothing to add, the pak already has that.\n"); return 0; }
+        return Apply(pak, sets, !any);
     }
 }
 
