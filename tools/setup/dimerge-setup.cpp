@@ -201,6 +201,7 @@ static Held HeldButtonAny(std::vector<Dev*>& devs, const wchar_t* prompt) {
 
 static int Test(int seconds);
 static int Install(int argc, wchar_t** argv);
+static const int kStartOver = 2;   // what Wizard returns when the user wants to learn the controllers again
 
 static int Wizard() {
     wprintf(L"\nMerge controllers\n=================\n");
@@ -320,6 +321,10 @@ static int Wizard() {
         wprintf(L"\n");
     }
 
+    // the plan is on the screen and nothing is written yet: the cheap moment to redo a pass that went wrong
+    std::wstring go = Ask(L"\nPress Enter to write dimerge.ini, or type r to start over", L"");
+    if (go == L"r" || go == L"R") return kStartOver;
+
     std::wstring out = ExeDir() + L"dimerge.ini";
     std::wofstream f(out);
     f << L"; dimerge.ini written by dimerge-setup. Every line can be edited by hand; dimerge.log in the game folder shows the result.\n";
@@ -350,10 +355,11 @@ static int Wizard() {
     f.close();
     wprintf(L"\nWritten: %s\n", out.c_str());
     for (;;) {
-        std::wstring c = Ask(L"\nNext: [t] show the merged wheel live for 15 s   [i] install into the game\n      [p] add crane, engine and HUD rows to the wheel bindings   [q] quit", L"q");
+        std::wstring c = Ask(L"\nNext: [t] show the merged wheel live for 15 s   [i] install into the game\n      [p] add crane, engine and HUD rows to the wheel bindings\n      [r] start over   [q] quit", L"q");
         if (c == L"t" || c == L"T") Test(15);
         else if (c == L"i" || c == L"I") Install(1, nullptr);
         else if (c == L"p" || c == L"P") PakSlotsMenu();
+        else if (c == L"r" || c == L"R") return kStartOver;   // the live view is where a wrong pedal shows up
         else break;
     }
     return 0;
@@ -513,7 +519,7 @@ static int StartScreen() {
             L"     Changes initial.pak and keeps the untouched pak next to it. Works without 1.\n");
     for (;;) {
         std::wstring c = Ask(L"\nType 1 or 2 and press Enter", L"");
-        if (c == L"1") return Wizard();
+        if (c == L"1") { int rc; do rc = Wizard(); while (rc == kStartOver); return rc; }
         if (c == L"2") return PakSlotsMenu();
         if (feof(stdin)) return 1;
     }
