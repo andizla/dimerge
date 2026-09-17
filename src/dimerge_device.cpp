@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // dimerge_device.cpp: the IDirectInput8 and IDirectInputDevice8 wrappers, in both A and W flavours.
 #include "dimerge.h"
 #include <deque>

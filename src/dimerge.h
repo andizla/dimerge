@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // dimerge: a dinput8.dll proxy that presents several DirectInput devices to the game as one.
 // The primary device (the force-feedback wheelbase) is passed through untouched, so FFB effects reach it
 // natively. Axes, buttons and hats of the other devices are written into the primary's data block.

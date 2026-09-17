@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // pak_slots.cpp: adds wheel binding slots to SnowRunner's initial.pak, from the start screen, the wizard's menu or the
 // command line.
 //
@@ -55,7 +56,29 @@ uint32_t Crc32(const uint8_t* p, size_t n) {
     return ~crc;
 }
 
-// ---------- inflate (RFC 1951), after Mark Adler's puff
+// ---------- inflate (RFC 1951). This part is an altered version of puff.c by Mark Adler (zlib contrib, version 2.3),
+// moved onto C++ containers with bounds-checked input. Its notice:
+//
+//   Copyright (C) 2002-2013 Mark Adler, all rights reserved
+//   version 2.3, 21 Jan 2013
+//
+//   This software is provided 'as-is', without any express or implied
+//   warranty.  In no event will the author be held liable for any damages
+//   arising from the use of this software.
+//
+//   Permission is granted to anyone to use this software for any purpose,
+//   including commercial applications, and to alter it and redistribute it
+//   freely, subject to the following restrictions:
+//
+//   1. The origin of this software must not be misrepresented; you must not
+//      claim that you wrote the original software. If you use this software
+//      in a product, an acknowledgment in the product documentation would be
+//      appreciated but is not required.
+//   2. Altered source versions must be plainly marked as such, and must not be
+//      misrepresented as being the original software.
+//   3. This notice may not be removed or altered from any source distribution.
+//
+//   Mark Adler    madler@alumni.caltech.edu
 struct BitIn {
     const uint8_t* p; size_t n; size_t pos = 0; uint32_t buf = 0; int cnt = 0; bool bad = false;
     int Bits(int k) {

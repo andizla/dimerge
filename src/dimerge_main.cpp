@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // dimerge_main.cpp: DLL entry, the dinput8 exports, logging, config and the private joystick2 format.
 #define INITGUID
 #include "dimerge.h"

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // dimerge-setup: the console wizard and installer for dimerge.
 //
 //   dimerge-setup              start screen: 1 runs the wizard (pick the wheel and the devices to merge, learn their

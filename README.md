@@ -106,4 +106,4 @@ Visual Studio 2022 Community, x64, static CRT. `src\build.bat` writes `src\out\d
 
 The game imports `DirectInput8Create` from `dinput8.dll` and Windows loads the copy in the game folder first. The proxy loads the real `System32\dinput8.dll` (or the chained proxy), wraps `IDirectInput8` and, for the wheelbase only, `IDirectInputDevice8`. `EnumDevices` skips the merged devices. The wrapped device forwards every call to the wheelbase, effects included, and after each `GetDeviceState` or `GetDeviceData` it polls the merged devices (opened non-exclusive, background) and writes their values at the offsets of the game's data format. Property calls for merged objects, ranges and dead zones for instance, are translated to the device they belong to. Buffered input for merged devices is generated from state changes.
 
-MIT license, see `LICENSE`.
+GNU General Public License v3.0 (GPL-3.0-only), see `LICENSE`. The inflate code in the setup tool is an altered version of puff.c by Mark Adler; its zlib notice is quoted in `tools\setup\pak_slots.cpp`.

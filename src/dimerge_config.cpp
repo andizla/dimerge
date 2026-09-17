@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // dimerge_config.cpp: reads dimerge.ini.
 #include "dimerge.h"
 #include <fstream>

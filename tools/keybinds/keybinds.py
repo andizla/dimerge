@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
 """keybinds: writes KEYBINDS.md, a reference of what the merged wheel can bind in SnowRunner.
 
 Sources: the game's initial.pak (the binding slots a custom wheel gets and their English names), dimerge.log

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 // dienum: list every attached DirectInput8 game controller with type, VID/PID, caps and objects.
 // "dienum watch VID:PID [seconds]" prints live DIJOYSTATE2 values of one device.
 #define DIRECTINPUT_VERSION 0x0800

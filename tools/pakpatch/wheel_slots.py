@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
 """wheel_slots: adds binding slots for custom steering wheels to SnowRunner's initial.pak.
 
 A wheel the game does not know by vendor id gets the "Custom" preset, and the controls menu offers that preset a
